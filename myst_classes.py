@@ -87,8 +87,9 @@ class graph_solver:
             configs (set): set of solvable configurations found so far.
             base_config
         """
-        current_config = tuple(nx.get_node_attributes(self.graph, 'color').values())
-        print("All configs: " + str(configs))
+        current_config = configuration(self.current_node, self. last_node,
+                                        tuple(nx.get_node_attributes(self.graph, 'color').values()))
+        # print("All configs: " + str(configs))
         print("Current config is: " + str(current_config))
         if current_config not in configs:
             print("New config found!")
@@ -97,15 +98,15 @@ class graph_solver:
             base_current = self.current_node
             base_last = self.last_node
             for node in range(0, self.num_nodes):
-                print("Trying to move from node " + str(self.current_node) + " to node " + str(node))
+                # print("Trying to move from node " + str(self.current_node) + " to node " + str(node))
                 if self.backtrack(node, self.current_node):
-#                     print("Moving from node " + str(self.last_node) + " to node " + str(node))
-                    print("Backtrack successful")
+                    print("Backtracking from node " + str(self.last_node) + " to node " + str(node))
+                    # print("Backtrack successful!")
                     self.recursion_level += 1
                     print("Stepping down to level " + str(self.recursion_level))
-                    print("Base config: " + str(base_config))
-                    print("Base current: " + str(base_current))
-                    print("Base lase: " + str(base_last))
+                    # print("Base config: " + str(base_config))
+                    # print("Base current: " + str(base_current))
+                    # print("Base lase: " + str(base_last))
                     # current_node is now node
                     # last_node is now the previous current_node
                     self.search(configs, current_config)
@@ -114,9 +115,10 @@ class graph_solver:
                     print("Stepping up to level " + str(self.recursion_level))
                     self.current_node = base_current
                     self.last_node = base_last
-                    self.set_all_colors(base_config)
+                    self.set_all_colors(base_config.config)
                 else:
-                    print("Could not backtrack")
+                    pass
+                    # print("Could not backtrack")
         else:
             print("Repeat config found!")
                     
@@ -138,10 +140,15 @@ class graph_solver:
             self.set_all_colors(all_configs[0])
             self.recursion_level = 0
             # create fresh solvable list
-            solvable = set()
+            config_set = set()
             self.current_node = node
             self.last_node = node
-            self.search(solvable, all_configs[0])
+            starting_config = configuration(node, node, all_configs[0])
+            self.search(config_set, starting_config)
+            solvable = set()
+            # strip directions off of configurations
+            for config in config_set:
+                solvable.add(config.config)
             print("Search Completed")
             d['Node'] = [node]
             # determine whether more than half of all configs are solvable 
@@ -164,13 +171,22 @@ class graph_solver:
 
 class configuration:
 
-    def __init__(self, direction, config):
-        self.direction = direction
+    def __init__(self, current, last, config):
+        self.current = current
+        self.last = last
         self.config = config
 
     def __eq__(self, other):
         if isinstance(other, configuration):
-            return (self.direction == other.direction) and (self.config == other.config)
+            return ((self.current == other.current) and
+                    (self.last == other.last) and
+                    (self.config == other.config))
        
     def __str__(self):
-        return "Configuration " + str(self.config) + "from node " + str(self.direction)
+        return "Configuration " + str(self.config) + " at node " + str(self.current) + " from node " + str(self.last)
+
+    def __hash__(self):
+        hash = str(self.current) + str(self.last)
+        for num in self.config:
+            hash += str(num)
+        return int(hash)
