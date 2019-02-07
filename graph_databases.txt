@@ -1,5 +1,0 @@
-Simple Graphs:
-http://users.cecs.anu.edu.au/~bdm/data/graphs.html
-
-Interesting Graphs:
-https://hog.grinvin.org/Init.action
