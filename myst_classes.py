@@ -18,6 +18,7 @@ class graph_solver:
         self.last_node = 0
         self.recursion_level = 0 # debug parameter
         self.data = self.find_solvable()
+        self.num_solvable = self.get_num_solvable()
     
     def build_graph(self):
         G = nx.Graph()
@@ -79,63 +80,94 @@ class graph_solver:
         self.reverse_iterate_color(end_node)
         return True
     
-    def search(self, configs, base_config):
+    def search(self, configs, base_config, verbose = False):
         """Recursively find all solvable configurations for a graph by backtracking.
             Should only be called by its wrapper function, find_solvable
 
         Args:
             configs (set): set of solvable configurations found so far.
-            base_config
+            base_config (configuration): the configuration at the start of the recursive call, to reset after completion
+            verbose (bool): True prints out all steps of the search, False suppresses
         """
         current_config = configuration(self.current_node, self. last_node,
                                         tuple(nx.get_node_attributes(self.graph, 'color').values()))
-        # print("All configs: " + str(configs))
-        print("Current config is: " + str(current_config))
+        if verbose:
+            print("Current config is: " + str(current_config))
         if current_config not in configs:
-            print("New config found!")
+            if verbose:
+                print("New config found!")
             configs.add(current_config)
             base_config = current_config
             base_current = self.current_node
             base_last = self.last_node
             for node in range(0, self.num_nodes):
-                # print("Trying to move from node " + str(self.current_node) + " to node " + str(node))
                 if self.backtrack(node, self.current_node):
-                    print("Backtracking from node " + str(self.last_node) + " to node " + str(node))
-                    # print("Backtrack successful!")
+                    if verbose:
+                        print("Backtracking from node " + str(self.last_node) + " to node " + str(node))
                     self.recursion_level += 1
-                    print("Stepping down to level " + str(self.recursion_level))
-                    # print("Base config: " + str(base_config))
-                    # print("Base current: " + str(base_current))
-                    # print("Base lase: " + str(base_last))
+                    if verbose:
+                        print("Stepping down to level " + str(self.recursion_level))
                     # current_node is now node
                     # last_node is now the previous current_node
                     self.search(configs, current_config)
                     # when search bottoms out, reset node parameters
                     self.recursion_level -= 1
-                    print("Stepping up to level " + str(self.recursion_level))
+                    if verbose:
+                        print("Stepping up to level " + str(self.recursion_level))
                     self.current_node = base_current
                     self.last_node = base_last
                     self.set_all_colors(base_config.config)
-                else:
-                    pass
-                    # print("Could not backtrack")
         else:
-            print("Repeat config found!")
+            if verbose:
+                print("Repeat config found!")
+
+    # # Function to print a BFS of graph 
+    # def BFS(self, s): 
+  
+    #     # Mark all the vertices as not visited 
+    #     visited = [False] * (len(self.graph)) 
+  
+    #     # Create a queue for BFS 
+    #     queue = [] 
+  
+    #     # Mark the source node as  
+    #     # visited and enqueue it 
+    #     queue.append(s) 
+    #     visited[s] = True
+  
+    #     while queue: 
+  
+    #         # Dequeue a vertex from  
+    #         # queue and print it 
+    #         s = queue.pop(0) 
+    #         print (s, end = " ") 
+  
+    #         # Get all adjacent vertices of the 
+    #         # dequeued vertex s. If a adjacent 
+    #         # has not been visited, then mark it 
+    #         # visited and enqueue it 
+    #         for i in self.graph[s]: 
+    #             if visited[i] == False: 
+    #                 queue.append(i) 
+    #                 visited[i] = True
                     
-    def find_solvable(self):
-        print("Solving graph with:")
-        print("Nodes: " + str(self.num_nodes))
-        print("Colors: " + str(self.num_colors))
+    def find_solvable(self, verbose = False):
+        if verbose:
+            print("Solving graph with:")
+            print("Nodes: " + str(self.num_nodes))
+            print("Colors: " + str(self.num_colors))
         all_configs = self.generate_all_configs()
         data = pd.DataFrame(columns = ['Node', 'Solvable_Flag', 'Configs', 'Num_Configs'])
         all_configs_set = set(all_configs)
         threshold = (self.num_colors ** self.num_nodes) / 2
-        print("This graph has " + str(len(all_configs)) + " possible configs; the threshold is " + str(threshold))
+        if verbose:
+            print("This graph has " + str(len(all_configs)) + " possible configs; the threshold is " + str(threshold))
         # attempt puzzle from each possible end point
         for node in range(0, self.num_nodes):
             d = {}
-            print()
-            print("Finding solutions starting from node " + str(node) + ":")
+            if verbose:
+                print()
+                print("Finding solutions starting from node " + str(node) + ":")
             # reset graph to solved config
             self.set_all_colors(all_configs[0])
             self.recursion_level = 0
@@ -149,7 +181,8 @@ class graph_solver:
             # strip directions off of configurations
             for config in config_set:
                 solvable.add(config.config)
-            print("Search Completed")
+            if verbose:
+                print("Search Completed")
             d['Node'] = [node]
             # determine whether more than half of all configs are solvable 
             # if more than half are solvable, save only unsolvable configs and set solvable flag to 0
@@ -168,6 +201,21 @@ class graph_solver:
             row = pd.DataFrame(data = d)
             data = data.append(row, ignore_index = True)
         return data
+
+    def get_num_solvable(self):
+        all_configs = set(self.generate_all_configs())
+
+        solvable = set()
+
+        for index in self.data.index:
+            points = self.data.loc[index, ['Solvable_Flag', 'Configs']]
+            if points['Solvable_Flag'] == 0:
+                solvable = solvable.union(all_configs - points['Configs'])
+            else:
+                solvable = solvable.union(points['Configs'])
+                
+        return len(solvable)
+
 
 class configuration:
 
