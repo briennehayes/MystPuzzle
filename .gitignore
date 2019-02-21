@@ -1,0 +1,8 @@
+graph_databases.txt
+showg_win64.exe
+*.lst
+/graph_lists
+/.ipynb_checkpoints
+/__pycache__
+/Misc_Notebooks
+/Results
