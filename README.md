@@ -6,4 +6,7 @@ myst_classes.py
   - contains the custom classes used for puzzle solving
   
 MystPuzzle.ipynb
-  - current exploration/driver code
+  - main notebook for collecting preliminary results 
+  
+all_graphs.txt
+  - csv file containing attributes of all connected graphs of degree 4-8
