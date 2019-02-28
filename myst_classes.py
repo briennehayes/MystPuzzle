@@ -88,6 +88,27 @@ class graph_solver:
         # TODO: accept configuration objects and strip out the direction parameters
         new_color_dict = dict(enumerate([{'color' : color} for color in new_colors]))
         nx.set_node_attributes(self.graph, new_color_dict)
+
+    def set_current_config(self, new_config):
+        """Set the current configuration of the solver.
+
+        Args:
+            new_config (configuration): the desired configuration.
+        """
+        self.set_all_colors(base_config.config)
+        self.current_node = new_config.current
+        self.last_node = new_config.last
+
+    def get_current_config(self):
+        """Returns the current configuration of the solver.
+
+        Returns:
+            configuration: the solver's current configuration
+        """
+        return configuration(self.current_node, 
+                             self. last_node,
+                             tuple(nx.get_node_attributes(self.graph, 'color').values()))
+
         
     def generate_all_configs(self):
         """Produce a list of all possible configurations (not just solvable) for this puzzle instance.
@@ -107,10 +128,12 @@ class graph_solver:
         Returns:
             bool : True if the backtrack was successful, False if the step can't be made
         """
-        #an edge must exist to make the step
+        # TODO: should just use current_node as start_node
+
+        # an edge must exist to make the step
         if (start_node, end_node) not in self.graph.edges():
             return False
-        #can't return to a node you just came from
+        # can't return to a node you just came from
         if(start_node == self.last_node):
             return False
         self.current_node = start_node
@@ -118,49 +141,45 @@ class graph_solver:
         self.reverse_iterate_color(end_node)
         return True
     
-    def search(self, configs, base_config, verbose = False):
-        """Recursively find all solvable configurations for a graph by backtracking.
-            Should only be called by its wrapper function, find_solvable().
+    def search(self, final_config): 
+        """Find all solvable configurations for a graph via backtracking using a breadth-first search.
+            Should only be called by its wrapper function, find_solvable(). 
 
         Args:
-            configs (set): set of solvable configurations found so far.
-            base_config (configuration): the configuration at the start of the recursive call, to reset after completion.
-            verbose (bool): True prints out all steps of the search, False suppresses.
+            final_config (configuration): the ending configuration of the puzzle, from which backtracking starts.
+
+        Returns:
+            set of configurations: all solvable configurations for this graph.
         """
-        current_config = configuration(self.current_node, self. last_node,
-                                        tuple(nx.get_node_attributes(self.graph, 'color').values()))
-        if verbose:
-            print("Current config is: " + str(current_config))
-        if current_config not in configs:
-            if verbose:
-                print("New config found!")
-            configs.add(current_config)
-            base_config = current_config
-            base_current = self.current_node
-            base_last = self.last_node
+  
+        # For storing discovered solvable configs 
+        solvable = set()
+  
+        queue = [] 
+  
+        # Begin by adding the final (starting) config
+        queue.append(final_config) 
+        solvable.add(final_config)
+  
+        while queue: 
+  
+            # Dequeue next config and set the puzzle
+            base_config = queue.pop(0)
+            self.set_current_config(base_config)
+  
+            # Attempt to backtrack to every adjacent configuration, s
+            # saving and enqueueing new configs as they're discovered
             for node in range(0, self.num_nodes):
                 if self.backtrack(node, self.current_node):
-                    if verbose:
-                        print("Backtracking from node " + str(self.last_node) + " to node " + str(node))
-                    self.recursion_level += 1
-                    if verbose:
-                        print("Stepping down to level " + str(self.recursion_level))
-                    # current_node is now node
-                    # last_node is now the previous current_node
-                    self.search(configs, current_config)
-                    # when search bottoms out, reset node parameters
-                    self.recursion_level -= 1
-                    if verbose:
-                        print("Stepping up to level " + str(self.recursion_level))
-                    self.current_node = base_current
-                    self.last_node = base_last
-                    self.set_all_colors(base_config.config)
-        else:
-            if verbose:
-                print("Repeat config found!")
+                    current_config = self.get_current_config()
+                    if current_config not in solvable:
+                        queue.append(current_config)
+                        solvable.add(current_config)
+                    self.set_current_config(base_config)
+        
+        return solvable
 
-    # TODO: implement non-recursive search
-                    
+    # This is the find_solvable for the breadth-first search method
     def find_solvable(self, verbose = False):
         """Executes a search ending on every node in the graph, then stores the results.
 
@@ -187,14 +206,9 @@ class graph_solver:
                 print()
                 print("Finding solutions starting from node " + str(node) + ":")
             # reset graph to solved config
-            self.set_all_colors(all_configs[0])
-            self.recursion_level = 0
-            # create fresh solvable list
-            config_set = set()
-            self.current_node = node
-            self.last_node = node
             starting_config = configuration(node, node, all_configs[0])
-            self.search(config_set, starting_config)
+            self.set_current_config(starting_config)
+            config_set = self.search(starting_config)
             solvable = set()
             # strip directions off of configurations
             for config in config_set:
