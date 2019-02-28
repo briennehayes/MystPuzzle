@@ -95,7 +95,7 @@ class graph_solver:
         Args:
             new_config (configuration): the desired configuration.
         """
-        self.set_all_colors(base_config.config)
+        self.set_all_colors(new_config.config)
         self.current_node = new_config.current
         self.last_node = new_config.last
 
@@ -179,7 +179,6 @@ class graph_solver:
         
         return solvable
 
-    # This is the find_solvable for the breadth-first search method
     def find_solvable(self, verbose = False):
         """Executes a search ending on every node in the graph, then stores the results.
 
