@@ -30,30 +30,35 @@ class graph_solver:
         self.last_node = 0
         self.recursion_level = 0 # debug parameter
         self.data = self.find_solvable()
-        self.num_solvable = self.get_num_solvable()
+        self.num_solvable = self.data['Num_Color_Sets']
     
     def build_graph(self):
         """Generates a networkx graph object w/ color attributes for this puzzle instance.
         """
         G = nx.Graph()
         G.add_nodes_from(np.arange(self.num_nodes))
+        G.add_node(-1) # starting position, not an actual node
         nx.set_node_attributes(G, 0, name = 'color')
+        start_edges = [(-1, num) for num in np.arange(self.num_nodes)]
         G.add_edges_from(self.edge_list)
+        G.add_edges_from(start_edges)
         return(G)
         
     def draw_current_config(self):
         """Visualize the puzzle's graph and current color configuration.
         """
-        colors = set(nx.get_node_attributes(self.graph, 'color').values())
-        mapping = dict(zip(sorted(colors), count()))
-        nodes = self.graph.nodes()
-        colors = [mapping[self.graph.node[n]['color']] for n in nodes]
+        G = self.graph.subgraph(np.arange(self.num_nodes))
 
-        pos = nx.spring_layout(self.graph)
-        nx.draw_networkx_edges(self.graph, pos)
-        nc = nx.draw_networkx_nodes(self.graph, pos, nodelist=nodes, node_color=colors, 
+        colors = set(nx.get_node_attributes(G, 'color').values())
+        mapping = dict(zip(sorted(colors), count()))
+        nodes = G.nodes()
+        colors = [mapping[G.node[n]['color']] for n in nodes]
+
+        pos = nx.spring_layout(G)
+        nx.draw_networkx_edges(G, pos)
+        nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors, 
                                     with_labels=True, cmap=plt.cm.jet)
-        labels = nx.draw_networkx_labels(self.graph, pos)
+        labels = nx.draw_networkx_labels(G, pos)
         plt.colorbar(nc) # TODO: make colorbar discrete / show all color values
         plt.show()
         
@@ -85,8 +90,8 @@ class graph_solver:
         Args:
             new_colors (tuple of ints): the graph's new configuration.
         """
-        # TODO: accept configuration objects and strip out the direction parameters
         new_color_dict = dict(enumerate([{'color' : color} for color in new_colors]))
+        new_color_dict[-1] = {'color' : 0} # color of start position doesn't actually matter
         nx.set_node_attributes(self.graph, new_color_dict)
 
     def set_current_config(self, new_config):
@@ -95,7 +100,7 @@ class graph_solver:
         Args:
             new_config (configuration): the desired configuration.
         """
-        self.set_all_colors(new_config.config)
+        self.set_all_colors(new_config.color_set)
         self.current_node = new_config.current
         self.last_node = new_config.last
 
@@ -105,16 +110,18 @@ class graph_solver:
         Returns:
             configuration: the solver's current configuration
         """
+        G = self.graph.subgraph(np.arange(self.num_nodes))
+
         return configuration(self.current_node, 
                              self. last_node,
-                             tuple(nx.get_node_attributes(self.graph, 'color').values()))
+                             tuple(nx.get_node_attributes(G, 'color').values()))
 
         
-    def generate_all_configs(self):
-        """Produce a list of all possible configurations (not just solvable) for this puzzle instance.
+    def generate_all_color_sets(self):
+        """Produce a list of all possible color sets (not just solvable) for this puzzle instance.
 
         Returns:
-            list of tuples of ints: all possible configurations for this puzzle instance.
+            list of tuples of ints: all possible color sets for this puzzle instance.
         """
         return list(product(range(0, self.num_colors), repeat = self.num_nodes))
     
@@ -141,7 +148,7 @@ class graph_solver:
         self.reverse_iterate_color(end_node)
         return True
     
-    def search(self, final_config): 
+    def search(self, final_config, verbose = False): 
         """Find all solvable configurations for a graph via backtracking using a breadth-first search.
             Should only be called by its wrapper function, find_solvable(). 
 
@@ -160,22 +167,39 @@ class graph_solver:
         # Begin by adding the final (starting) config
         queue.append(final_config) 
         solvable.add(final_config)
+
+        if verbose:
+            print("Starting with configuration " + str(final_config))
   
         while queue: 
   
             # Dequeue next config and set the puzzle
             base_config = queue.pop(0)
             self.set_current_config(base_config)
+
+            if verbose:
+                print("The base config is " + str(base_config))
   
-            # Attempt to backtrack to every adjacent configuration, s
+            # Attempt to backtrack to every adjacent configuration, 
             # saving and enqueueing new configs as they're discovered
             for node in range(0, self.num_nodes):
+                if verbose:
+                    print("Attempting backtrack to node " + str(node))
                 if self.backtrack(node, self.current_node):
+                    if verbose:
+                        print("Backtrack successful!")
                     current_config = self.get_current_config()
+                    if verbose:
+                        print("New config is " + str(current_config))
                     if current_config not in solvable:
                         queue.append(current_config)
                         solvable.add(current_config)
                     self.set_current_config(base_config)
+                    if verbose:
+                        print("Resetting to base config")
+                else:
+                    if verbose:
+                        print("Cannot backtrack")
         
         return solvable
 
@@ -192,67 +216,51 @@ class graph_solver:
             print("Solving graph with:")
             print("Nodes: " + str(self.num_nodes))
             print("Colors: " + str(self.num_colors))
-        all_configs = self.generate_all_configs()
-        data = pd.DataFrame(columns = ['Node', 'Solvable_Flag', 'Configs', 'Num_Configs'])
-        all_configs_set = set(all_configs)
+
+        # these are referred to later 
+        all_color_sets = self.generate_all_color_sets()
+        all_color_sets_set = set(all_color_sets)
         threshold = (self.num_colors ** self.num_nodes) / 2 # this will be used to determine which configs get saved
+
+        # this will store the graph's solvability information
+        data = pd.DataFrame(columns = ['Solvable_Flag', 'Color_Sets', 'Num_Color_Sets'])
+        
         if verbose:
-            print("This graph has " + str(len(all_configs)) + " possible configs; the threshold is " + str(threshold))
-        # attempt puzzle from each possible end point
-        for node in range(0, self.num_nodes):
-            d = {}
-            if verbose:
-                print()
-                print("Finding solutions starting from node " + str(node) + ":")
-            # reset graph to solved config
-            starting_config = configuration(node, node, all_configs[0])
-            self.set_current_config(starting_config)
-            config_set = self.search(starting_config)
-            solvable = set()
-            # strip directions off of configurations
-            for config in config_set:
-                solvable.add(config.config)
-            if verbose:
-                print("Search Completed")
-            d['Node'] = [node]
-            # determine whether more than half of all configs are solvable 
-            # if more than half are solvable, save only unsolvable configs and set solvable flag to 0
-            # since most graphs are entirely solvable, this saves a lot of space
-            if len(solvable) > threshold:
-                unsolvable = all_configs_set - solvable
-                num_configs = len(unsolvable)
-                d['Solvable_Flag'] = [0]
-                d['Configs'] = [unsolvable]
-                d['Num_Configs'] = num_configs
-            # otherwise, save all solvable configs and set solvable flag to 1
-            else:
-                num_configs = len(solvable)
-                d['Solvable_Flag'] = [1]
-                d['Configs'] = [solvable]
-                d['Num_Configs'] = num_configs
-            row = pd.DataFrame(data = d)
-            data = data.append(row, ignore_index = True)
+            print("This graph has " + str(len(all_color_sets)) + " possible configs; the threshold is " + str(threshold))
+        
+        initial_config = configuration(-1, -1, all_color_sets[0])
+
+        solvable = self.search(initial_config)
+
+        solvable_color_sets = set()
+        for config in solvable:
+            solvable_color_sets.add(config.color_set)
+
+        if verbose:
+            print("Search Completed")
+
+        d = {}
+        # determine whether more than half of all configs are solvable 
+        # if more than half are solvable, save only unsolvable configs and set solvable flag to 0
+        # since most graphs are entirely solvable, this saves a lot of space
+        if len(solvable_color_sets) > threshold:
+            unsolvable = all_color_sets_set - solvable_color_sets
+            num_color_sets = len(unsolvable)
+            d['Solvable_Flag'] = [0]
+            d['Color_Sets'] = [unsolvable]
+            d['Num_Color_Sets'] = num_color_sets
+        # otherwise, save all solvable configs and set solvable flag to 1
+        else:
+            num_color_sets = len(solvable_color_sets)
+            d['Solvable_Flag'] = [1]
+            d['Color_Sets'] = [solvable]
+            d['Num_Color_Sets'] = num_color_sets
+
+        if verbose:
+            print("This puzzle has " + str(num_color_sets) + " solvable color sets.")
+        
+        data = pd.DataFrame(data = d)
         return data
-
-    # TODO would it be more efficient to calculate this number in find_solvable?
-    def get_num_solvable(self):
-        """Determine the total number of solvable configurations for this puzzle instance.
-
-        Returns:
-            int: how many configurations are solvable in this puzzle instance.
-        """
-        all_configs = set(self.generate_all_configs())
-
-        solvable = set()
-
-        for index in self.data.index:
-            points = self.data.loc[index, ['Solvable_Flag', 'Configs']]
-            if points['Solvable_Flag'] == 0:
-                solvable = solvable.union(all_configs - points['Configs'])
-            else:
-                solvable = solvable.union(points['Configs'])
-                
-        return len(solvable)
 
 
 class configuration:
@@ -261,26 +269,30 @@ class configuration:
     Attributes:
         current (int): the location of the solver in this configuration.
         last (int): where the solver came from in this configuration.
-
+        color_set (tuple of ints): ordered representation of the color states of each node in the current configuration.
     """
 
-    def __init__(self, current, last, config):
+    def __init__(self, current, last, color_set):
         self.current = current
         self.last = last
-        self.config = config
+        self.color_set = color_set
 
     def __eq__(self, other):
         if isinstance(other, configuration):
             return ((self.current == other.current) and
                     (self.last == other.last) and
-                    (self.config == other.config))
+                    (self.color_set == other.color_set))
        
     def __str__(self):
-        return "Configuration " + str(self.config) + " at node " + str(self.current) + " from node " + str(self.last)
+        return "Configuration " + str(self.color_set) + " at node " + str(self.current) + " from node " + str(self.last)
 
-    # TODO: write a more efficient hash function
+    # TODO: write a more efficient hash function (that doesn't break)
     def __hash__(self):
-        hash = str(self.current) + str(self.last)
-        for num in self.config:
+        # obviously this breaks for graphs with 100 nodes, so this is a temporary fix
+        curr = 99 if self.current == -1 else self.current
+        prev = 99 if self.last == -1 else self.last
+
+        hash = str(curr) + str(prev)
+        for num in self.color_set:
             hash += str(num)
         return int(hash)
