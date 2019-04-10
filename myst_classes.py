@@ -124,6 +124,38 @@ class graph_solver:
             list of tuples of ints: all possible color sets for this puzzle instance.
         """
         return list(product(range(0, self.num_colors), repeat = self.num_nodes))
+
+    # TODO rewrite this function to make it more efficient (list comprehensions?)
+    def generate_all_configurations(self):
+        """Produce a list of all possible configurations (not just solvable) for this puzzle instance.
+
+        Returns:
+            list of configurations: all possible configurations for this puzzle instance.
+        """
+        # determine all possible color sets
+        all_color_sets = self.generate_all_color_sets()
+        zeros = all_color_sets[0]
+
+        # determine all possible moves
+        moves = []
+        for node in range(0, self.num_nodes):
+            moves.append((node, -1)) # every node has the -1 connection
+
+        for curr_node in range(0, self.num_nodes):
+            for prev_node in range(0, self.num_nodes):
+                if (curr_node, prev_node) in self.graph.edges():
+                    moves.append((curr_node, prev_node))
+        
+        # now combine them
+        all_configs = []
+        for move in moves:
+            if -1 in move:
+                all_configs.append(configuration(move[0], move[1], zeros))
+            else:
+                for color_set in all_color_sets:
+                    all_configs.append(configuration(move[0], move[1], color_set))
+
+        return all_configs
     
     def backtrack(self, start_node, end_node):
         """Simulate a step in the puzzle, but backwards, reverse-iterating the color of the end node.
