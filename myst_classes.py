@@ -147,9 +147,8 @@ class graph_solver:
         Returns:
             list of configurations: all possible configurations for this puzzle instance.
         """
-        # determine all possible color sets
-        all_color_sets = self.generate_all_color_sets()
-        zeros = all_color_sets[0]
+        # specifically refer to solved color set 
+        zeros = self.all_color_sets[0]
 
         # determine all possible moves
         moves = []
@@ -168,17 +167,17 @@ class graph_solver:
             if -1 in move:
                 all_configs.append(configuration(move[0], move[1], zeros))
             else:
-                for color_set in all_color_sets:
+                for color_set in self.all_color_sets:
                     all_configs.append(configuration(move[0], move[1], color_set))
 
         return all_configs
 
     def generate_all_configs_dict(self):
         # build a dictionary of all configurations and integer indices
-        all_configs = self.generate_all_configs()
         # need to build the relation both ways
-        num_to_config = dict(zip(range(0, len(all_configs)), all_configs))
-        config_to_num = dict(zip(all_configs, range(0, len(all_configs))))
+        ints = range(0, len(self.all_configs))
+        num_to_config = dict(zip(ints, self.all_configs))
+        config_to_num = dict(zip(self.all_configs, ints))
         all_configs_dict = {**num_to_config, **config_to_num}
         return all_configs_dict
 
@@ -221,8 +220,6 @@ class graph_solver:
         solvable = set()
 
         expanded = nx.DiGraph()
-
-        all_configs_dict = self.generate_all_configs_dict()
   
         queue = [] 
   
@@ -230,7 +227,7 @@ class graph_solver:
         queue.append(final_config) 
         solvable.add(final_config)
 
-        expanded.add_node(all_configs_dict[final_config], config = final_config)
+        expanded.add_node(self.all_configs_dict[final_config], config = final_config)
 
         if verbose:
             print("Starting with configuration " + str(final_config))
@@ -258,8 +255,8 @@ class graph_solver:
                     if current_config not in solvable:
                         queue.append(current_config)
                         solvable.add(current_config)
-                        expanded.add_node(all_configs_dict[current_config], config = current_config)
-                        expanded.add_edge(all_configs_dict[current_config], all_configs_dict[base_config])
+                        expanded.add_node(self.all_configs_dict[current_config], config = current_config)
+                        expanded.add_edge(self.all_configs_dict[current_config], self.all_configs_dict[base_config])
                     self.set_current_config(base_config)
                     if verbose:
                         print("Resetting to base config")
@@ -284,17 +281,16 @@ class graph_solver:
             print("Colors: " + str(self.num_colors))
 
         # these are referred to later 
-        all_color_sets = self.generate_all_color_sets()
-        all_color_sets_set = set(all_color_sets)
+        all_color_sets_set = set(self.all_color_sets)
         threshold = (self.num_colors ** self.num_nodes) / 2 # this will be used to determine which configs get saved
 
         # this will store the graph's solvability information
         data = pd.DataFrame(columns = ['Solvable_Flag', 'Color_Sets', 'Num_Color_Sets'])
         
         if verbose:
-            print("This graph has " + str(len(all_color_sets)) + " possible configs; the threshold is " + str(threshold))
+            print("This graph has " + str(len(self.all_color_sets)) + " possible configs; the threshold is " + str(threshold))
         
-        initial_config = configuration(-1, -1, all_color_sets[0])
+        initial_config = configuration(-1, -1, self.all_color_sets[0])
 
         solvable, expanded = self.search(initial_config)
 
@@ -327,9 +323,32 @@ class graph_solver:
         
         data = pd.DataFrame(data = d)
         return data, expanded
-    
+
+    # TODO: this method is awful, rewrite it
+    def is_reachable(self, start, end):
+        # special case: moving from solved config to exit config
+        if start.is_solved():
+            return end.current == -1
+        # first, check to make sure the move from start to end makes sense
+        if (start.current == end.last) and (start.last != end.current):
+            # now we need to ensure the change in color sets is possible
+            diffs = []
+            for i in range(0, len(start.color_set)):
+                diffs.append(start.color_set[i] - end.color_set[i])
+            not_zeros = [diff != 0 for diff in diffs]
+            # color sets should only differ by one place
+            if sum(not_zeros) == 1:
+                not_zero_index = [index for index, val in enumerate(not_zeros) if val][0]
+                # where they differ, end's color should equal start's color +1 mod num_colors
+                return end.color_set[not_zero_index] == start.color_set[not_zero_index] + 1 % self.num_colors
+            else:
+                return False
+        else:
+            return False
+
+    # TODO implement
     def build_expanded_graph(self):
-        all_configs_dict = self.generate_all_configs_dict()
+        return None
 
 
 
@@ -347,7 +366,11 @@ class configuration:
         self.last = last
         self.color_set = color_set
 
+    def is_solved(self):
+        return self.color_set == tuple([0] * len(self.color_set))
+
     def __eq__(self, other):
+        # TODO: else statement to throw an error for incompatible types?
         if isinstance(other, configuration):
             return ((self.current == other.current) and
                     (self.last == other.last) and
