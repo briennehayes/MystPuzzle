@@ -15,7 +15,6 @@ class graph_solver:
         graph (networkx graph): graph object (w/ color attributes) for this puzzle instance (private?).
         current_node (int): current location of the solver (private?).
         last_node (int): previous location of the solver (private?).
-        recursion_level (int): tracks how deeply the solver recurs (for debugging; will be removed when non-recursive search is implemented)
         data (pd.DataFrame): describes which configurations are solvable ending on each node in the graph.
         num_solvable (int): total number of configurations that are solvable in this graph, from any node.
 
@@ -28,8 +27,12 @@ class graph_solver:
         self.graph = self.build_graph()
         self.current_node = 0
         self.last_node = 0
-        self.recursion_level = 0 # debug parameter
-        self.data = self.find_solvable()
+        # These values are computed up-front since they're used in find_solvable
+        self.all_color_sets = self.generate_all_color_sets()
+        self.all_configs = self.generate_all_configs()
+        self.all_configs_dict = self.generate_all_configs_dict()
+        # Puzzle solutions are calculated on creation
+        self.data, self.expanded = self.find_solvable()
         self.num_solvable = self.data['Num_Color_Sets']
     
     def build_graph(self):
@@ -60,6 +63,18 @@ class graph_solver:
                                     with_labels=True, cmap=plt.cm.jet)
         labels = nx.draw_networkx_labels(G, pos)
         plt.colorbar(nc) # TODO: make colorbar discrete / show all color values
+        plt.show()
+
+    def draw_expanded_graph(self):
+        """Visualize the puzzle's graph and current color configuration.
+        """
+        G = self.expanded
+        nodes = G.nodes()
+
+        pos = nx.spring_layout(G)
+        nx.draw_networkx_edges(G, pos)
+        nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, with_labels=True)
+        labels = nx.draw_networkx_labels(G, pos)
         plt.show()
         
     # TODO: make internal solving/backtracking methods private?
@@ -126,7 +141,7 @@ class graph_solver:
         return list(product(range(0, self.num_colors), repeat = self.num_nodes))
 
     # TODO rewrite this function to make it more efficient (list comprehensions?)
-    def generate_all_configurations(self):
+    def generate_all_configs(self):
         """Produce a list of all possible configurations (not just solvable) for this puzzle instance.
 
         Returns:
@@ -148,6 +163,7 @@ class graph_solver:
         
         # now combine them
         all_configs = []
+        all_configs.append(configuration(-1, -1, zeros))
         for move in moves:
             if -1 in move:
                 all_configs.append(configuration(move[0], move[1], zeros))
@@ -156,6 +172,16 @@ class graph_solver:
                     all_configs.append(configuration(move[0], move[1], color_set))
 
         return all_configs
+
+    def generate_all_configs_dict(self):
+        # build a dictionary of all configurations and integer indices
+        all_configs = self.generate_all_configs()
+        # need to build the relation both ways
+        num_to_config = dict(zip(range(0, len(all_configs)), all_configs))
+        config_to_num = dict(zip(all_configs, range(0, len(all_configs))))
+        all_configs_dict = {**num_to_config, **config_to_num}
+        return all_configs_dict
+
     
     def backtrack(self, start_node, end_node):
         """Simulate a step in the puzzle, but backwards, reverse-iterating the color of the end node.
@@ -193,12 +219,18 @@ class graph_solver:
   
         # For storing discovered solvable configs 
         solvable = set()
+
+        expanded = nx.DiGraph()
+
+        all_configs_dict = self.generate_all_configs_dict()
   
         queue = [] 
   
         # Begin by adding the final (starting) config
         queue.append(final_config) 
         solvable.add(final_config)
+
+        expanded.add_node(all_configs_dict[final_config], config = final_config)
 
         if verbose:
             print("Starting with configuration " + str(final_config))
@@ -226,6 +258,8 @@ class graph_solver:
                     if current_config not in solvable:
                         queue.append(current_config)
                         solvable.add(current_config)
+                        expanded.add_node(all_configs_dict[current_config], config = current_config)
+                        expanded.add_edge(all_configs_dict[current_config], all_configs_dict[base_config])
                     self.set_current_config(base_config)
                     if verbose:
                         print("Resetting to base config")
@@ -233,7 +267,7 @@ class graph_solver:
                     if verbose:
                         print("Cannot backtrack")
         
-        return solvable
+        return solvable, expanded
 
     def find_solvable(self, verbose = False):
         """Executes a search ending on every node in the graph, then stores the results.
@@ -262,7 +296,7 @@ class graph_solver:
         
         initial_config = configuration(-1, -1, all_color_sets[0])
 
-        solvable = self.search(initial_config)
+        solvable, expanded = self.search(initial_config)
 
         solvable_color_sets = set()
         for config in solvable:
@@ -292,7 +326,11 @@ class graph_solver:
             print("This puzzle has " + str(num_color_sets) + " solvable color sets.")
         
         data = pd.DataFrame(data = d)
-        return data
+        return data, expanded
+    
+    def build_expanded_graph(self):
+        all_configs_dict = self.generate_all_configs_dict()
+
 
 
 class configuration:
