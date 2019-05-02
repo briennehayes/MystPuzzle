@@ -386,14 +386,18 @@ class configuration:
     def __str__(self):
         return "Configuration " + str(self.color_set) + " at node " + str(self.current) + " from node " + str(self.last)
 
-    # TODO: write a more efficient hash function (that doesn't break)
-    # USE tuple hash function
-    def __hash__(self):
-        # obviously this breaks for graphs with 100 nodes, so this is a temporary fix
-        curr = 99 if self.current == -1 else self.current
-        prev = 99 if self.last == -1 else self.last
+    # # TODO: write a more efficient hash function (that doesn't break)
+    # # USE tuple hash function
+    # def __hash__(self):
+    #     # obviously this breaks for graphs with 100 nodes, so this is a temporary fix
+    #     curr = 99 if self.current == -1 else self.current
+    #     prev = 99 if self.last == -1 else self.last
 
-        hash = str(curr) + str(prev)
-        for num in self.color_set:
-            hash += str(num)
-        return int(hash)
+    #     hash = str(curr) + str(prev)
+    #     for num in self.color_set:
+    #         hash += str(num)
+    #     return int(hash)
+
+    def __hash__(self):
+        tup = (self.current, self.last, self.color_set)
+        return hash(tup)
