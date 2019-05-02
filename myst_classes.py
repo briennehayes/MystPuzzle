@@ -19,7 +19,7 @@ class graph_solver:
         num_solvable (int): total number of configurations that are solvable in this graph, from any node.
 
     """
-    
+    # TODO: autosolve should be a parameter
     def __init__(self, edge_list, num_nodes, num_colors):
         self.edge_list = edge_list
         self.num_nodes = num_nodes
@@ -32,8 +32,9 @@ class graph_solver:
         self.all_configs = self.generate_all_configs()
         self.all_configs_dict = self.generate_all_configs_dict()
         # Puzzle solutions are calculated on creation
-        self.data, self.expanded = self.find_solvable()
+        self.data = self.find_solvable()
         self.num_solvable = self.data['Num_Color_Sets']
+        self.expanded = self.build_expanded_graph()
     
     def build_graph(self):
         """Generates a networkx graph object w/ color attributes for this puzzle instance.
@@ -71,7 +72,8 @@ class graph_solver:
         G = self.expanded
         nodes = G.nodes()
 
-        pos = nx.spring_layout(G)
+        # pos = nx.spring_layout(G)
+        pos = nx.kamada_kawai_layout(G)
         nx.draw_networkx_edges(G, pos)
         nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, with_labels=True)
         labels = nx.draw_networkx_labels(G, pos)
@@ -153,7 +155,7 @@ class graph_solver:
         # determine all possible moves
         moves = []
         for node in range(0, self.num_nodes):
-            moves.append((node, -1)) # every node has the -1 connection
+            moves.append((-1, node)) # every node has the -1 connection
 
         for curr_node in range(0, self.num_nodes):
             for prev_node in range(0, self.num_nodes):
@@ -218,16 +220,12 @@ class graph_solver:
   
         # For storing discovered solvable configs 
         solvable = set()
-
-        expanded = nx.DiGraph()
   
         queue = [] 
   
         # Begin by adding the final (starting) config
         queue.append(final_config) 
         solvable.add(final_config)
-
-        expanded.add_node(self.all_configs_dict[final_config], config = final_config)
 
         if verbose:
             print("Starting with configuration " + str(final_config))
@@ -255,8 +253,6 @@ class graph_solver:
                     if current_config not in solvable:
                         queue.append(current_config)
                         solvable.add(current_config)
-                        expanded.add_node(self.all_configs_dict[current_config], config = current_config)
-                        expanded.add_edge(self.all_configs_dict[current_config], self.all_configs_dict[base_config])
                     self.set_current_config(base_config)
                     if verbose:
                         print("Resetting to base config")
@@ -264,7 +260,7 @@ class graph_solver:
                     if verbose:
                         print("Cannot backtrack")
         
-        return solvable, expanded
+        return solvable
 
     def find_solvable(self, verbose = False):
         """Executes a search ending on every node in the graph, then stores the results.
@@ -292,7 +288,7 @@ class graph_solver:
         
         initial_config = configuration(-1, -1, self.all_color_sets[0])
 
-        solvable, expanded = self.search(initial_config)
+        solvable = self.search(initial_config)
 
         solvable_color_sets = set()
         for config in solvable:
@@ -322,15 +318,18 @@ class graph_solver:
             print("This puzzle has " + str(num_color_sets) + " solvable color sets.")
         
         data = pd.DataFrame(data = d)
-        return data, expanded
+        return data
 
     # TODO: this method is awful, rewrite it
     def is_reachable(self, start, end):
         # special case: moving from solved config to exit config
         if start.is_solved():
-            return end.current == -1
+            if start.current != -1:
+                return end.current == -1 and end.last == start.current
+            else:
+                return end.current == -1 and end.last == -1
         # first, check to make sure the move from start to end makes sense
-        if (start.current == end.last) and (start.last != end.current):
+        if (start.current == end.last) and (start.last != end.current) and (start.current, end.current) in self.graph.edges():
             # now we need to ensure the change in color sets is possible
             diffs = []
             for i in range(0, len(start.color_set)):
@@ -340,15 +339,23 @@ class graph_solver:
             if sum(not_zeros) == 1:
                 not_zero_index = [index for index, val in enumerate(not_zeros) if val][0]
                 # where they differ, end's color should equal start's color +1 mod num_colors
-                return end.color_set[not_zero_index] == start.color_set[not_zero_index] + 1 % self.num_colors
+                return end.color_set[not_zero_index] == ((start.color_set[not_zero_index] + 1) % self.num_colors)
             else:
                 return False
         else:
             return False
 
-    # TODO implement
+    # TODO documentation
     def build_expanded_graph(self):
-        return None
+        expanded = nx.DiGraph()
+        for config in self.all_configs:
+            expanded.add_node(self.all_configs_dict[config], config = config)
+        for start_config in self.all_configs:
+            for end_config in self.all_configs:
+                if self.is_reachable(start_config, end_config):
+                    expanded.add_edge(self.all_configs_dict[start_config], self.all_configs_dict[end_config])
+
+        return expanded
 
 
 
@@ -380,6 +387,7 @@ class configuration:
         return "Configuration " + str(self.color_set) + " at node " + str(self.current) + " from node " + str(self.last)
 
     # TODO: write a more efficient hash function (that doesn't break)
+    # USE tuple hash function
     def __hash__(self):
         # obviously this breaks for graphs with 100 nodes, so this is a temporary fix
         curr = 99 if self.current == -1 else self.current

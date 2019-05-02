@@ -8,8 +8,13 @@ graph3 = mc.graph_solver([(0, 1), (1, 2), (2, 0)], 3, 2)
 graph3.draw_current_config()
 graph3.draw_expanded_graph()
 
-graph_dict = graph3.generate_all_configs_dict()
+for key in graph3.all_configs_dict:
+    print(str(key) + ": " + str(graph3.all_configs_dict[key]))
 
+config1 = mc.configuration(1, 0, (1, 0, 1))
+config2 = mc.configuration(2, 1, (1, 0, 0))
+
+graph3.is_reachable(config1, config2)
 
 # Four-vertex graphs
 
