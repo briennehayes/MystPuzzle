@@ -41,17 +41,18 @@ class graph_solver:
         """
         G = nx.Graph()
         G.add_nodes_from(np.arange(self.num_nodes))
-        G.add_node(-1) # starting position, not an actual node
+        G.add_nodes_from([-1, -2, -3]) # signify beginning, end, and exit states
         nx.set_node_attributes(G, 0, name = 'color')
         start_edges = [(-1, num) for num in np.arange(self.num_nodes)]
-        G.add_edges_from(self.edge_list)
-        G.add_edges_from(start_edges)
+        end_edges = [(-2, num) for num in np.arange(self.num_nodes)]
+        G.add_edges_from(self.edge_list + start_edges + end_edges)
+        G.add_edge(-2, -3)
         return(G)
         
     def draw_current_config(self):
         """Visualize the puzzle's graph and current color configuration.
         """
-        G = self.graph.subgraph(np.arange(self.num_nodes))
+        G = self.graph.subgraph(np.arange(self.num_nodes)) # exclude beginning/ending markers
 
         colors = set(nx.get_node_attributes(G, 'color').values())
         mapping = dict(zip(sorted(colors), count()))
@@ -109,6 +110,8 @@ class graph_solver:
         """
         new_color_dict = dict(enumerate([{'color' : color} for color in new_colors]))
         new_color_dict[-1] = {'color' : 0} # color of start position doesn't actually matter
+        new_color_dict[-2] = {'color' : 0} # same for end position
+        new_color_dict[-3] = {'color' : 0} # and exit state
         nx.set_node_attributes(self.graph, new_color_dict)
 
     def set_current_config(self, new_config):
@@ -149,24 +152,29 @@ class graph_solver:
         Returns:
             list of configurations: all possible configurations for this puzzle instance.
         """
+        nodes = range(0, self.num_nodes)
+
+        # since -1 is the start position, you can move to any node from -1
+        start_moves = [(node, -1) for node in nodes]
+
+        # since -2 is the end position, you can move from any node to -2
+        end_moves = [(-2, node) for node in nodes]
+
+        # determine all other possible moves
+        other_moves = [(curr_node, prev_node) for curr_node in nodes for prev_node in nodes 
+                       if (curr_node, prev_node) in self.graph.edges()]
+
+        moves = start_moves + end_moves + other_moves
+
         # specifically refer to solved color set 
         zeros = self.all_color_sets[0]
 
-        # determine all possible moves
-        moves = []
-        for node in range(0, self.num_nodes):
-            moves.append((-1, node)) # every node has the -1 connection
-
-        for curr_node in range(0, self.num_nodes):
-            for prev_node in range(0, self.num_nodes):
-                if (curr_node, prev_node) in self.graph.edges():
-                    moves.append((curr_node, prev_node))
-        
-        # now combine them
+        # combine moves with all possible color sets
         all_configs = []
-        all_configs.append(configuration(-1, -1, zeros))
+        all_configs.append(configuration(-3, -2, zeros)) # manually add exit configuration
         for move in moves:
-            if -1 in move:
+            if -2 in move:
+                # only possible to move to -2 when puzzle is solved
                 all_configs.append(configuration(move[0], move[1], zeros))
             else:
                 for color_set in self.all_color_sets:
@@ -286,7 +294,7 @@ class graph_solver:
         if verbose:
             print("This graph has " + str(len(self.all_color_sets)) + " possible configs; the threshold is " + str(threshold))
         
-        initial_config = configuration(-1, -1, self.all_color_sets[0])
+        initial_config = configuration(-3, -2, self.all_color_sets[0])
 
         solvable = self.search(initial_config)
 
@@ -385,18 +393,6 @@ class configuration:
        
     def __str__(self):
         return "Configuration " + str(self.color_set) + " at node " + str(self.current) + " from node " + str(self.last)
-
-    # # TODO: write a more efficient hash function (that doesn't break)
-    # # USE tuple hash function
-    # def __hash__(self):
-    #     # obviously this breaks for graphs with 100 nodes, so this is a temporary fix
-    #     curr = 99 if self.current == -1 else self.current
-    #     prev = 99 if self.last == -1 else self.last
-
-    #     hash = str(curr) + str(prev)
-    #     for num in self.color_set:
-    #         hash += str(num)
-    #     return int(hash)
 
     def __hash__(self):
         tup = (self.current, self.last, self.color_set)
