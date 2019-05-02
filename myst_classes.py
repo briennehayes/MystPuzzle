@@ -20,7 +20,7 @@ class graph_solver:
 
     """
     # TODO: autosolve should be a parameter
-    def __init__(self, edge_list, num_nodes, num_colors):
+    def __init__(self, edge_list, num_nodes, num_colors, verbose = False):
         self.edge_list = edge_list
         self.num_nodes = num_nodes
         self.num_colors = num_colors
@@ -32,7 +32,7 @@ class graph_solver:
         self.all_configs = self.generate_all_configs()
         self.all_configs_dict = self.generate_all_configs_dict()
         # Puzzle solutions are calculated on creation
-        self.data = self.find_solvable()
+        self.data = self.find_solvable(verbose)
         self.num_solvable = self.data['Num_Color_Sets']
         self.expanded = self.build_expanded_graph()
     
@@ -41,12 +41,11 @@ class graph_solver:
         """
         G = nx.Graph()
         G.add_nodes_from(np.arange(self.num_nodes))
-        G.add_nodes_from([-1, -2, -3]) # signify beginning, end, and exit states
+        G.add_nodes_from([-1, -2]) # signify beginning and end states
         nx.set_node_attributes(G, 0, name = 'color')
         start_edges = [(-1, num) for num in np.arange(self.num_nodes)]
         end_edges = [(-2, num) for num in np.arange(self.num_nodes)]
         G.add_edges_from(self.edge_list + start_edges + end_edges)
-        G.add_edge(-2, -3)
         return(G)
         
     def draw_current_config(self):
@@ -111,7 +110,6 @@ class graph_solver:
         new_color_dict = dict(enumerate([{'color' : color} for color in new_colors]))
         new_color_dict[-1] = {'color' : 0} # color of start position doesn't actually matter
         new_color_dict[-2] = {'color' : 0} # same for end position
-        new_color_dict[-3] = {'color' : 0} # and exit state
         nx.set_node_attributes(self.graph, new_color_dict)
 
     def set_current_config(self, new_config):
@@ -171,7 +169,6 @@ class graph_solver:
 
         # combine moves with all possible color sets
         all_configs = []
-        all_configs.append(configuration(-3, -2, zeros)) # manually add exit configuration
         for move in moves:
             if -2 in move:
                 # only possible to move to -2 when puzzle is solved
@@ -286,17 +283,20 @@ class graph_solver:
 
         # these are referred to later 
         all_color_sets_set = set(self.all_color_sets)
-        threshold = (self.num_colors ** self.num_nodes) / 2 # this will be used to determine which configs get saved
+        threshold = (len(self.all_color_sets)) / 2 # this will be used to determine which configs get saved
 
         # this will store the graph's solvability information
         data = pd.DataFrame(columns = ['Solvable_Flag', 'Color_Sets', 'Num_Color_Sets'])
         
         if verbose:
-            print("This graph has " + str(len(self.all_color_sets)) + " possible configs; the threshold is " + str(threshold))
+            print("This graph has " + str(len(self.all_color_sets)) + " possible color sets; the threshold is " + str(threshold))
         
-        initial_config = configuration(-3, -2, self.all_color_sets[0])
+        initial_configs = [configuration(-2, node, self.all_color_sets[0]) for node in range(0, self.num_nodes)]
+        solvable = set()
 
-        solvable = self.search(initial_config)
+        for config in initial_configs:
+            s = self.search(config, verbose = verbose)
+            solvable = solvable.union(s)
 
         solvable_color_sets = set()
         for config in solvable:
@@ -315,15 +315,19 @@ class graph_solver:
             d['Solvable_Flag'] = [0]
             d['Color_Sets'] = [unsolvable]
             d['Num_Color_Sets'] = num_color_sets
+            if verbose:
+                print_num = len(self.all_color_sets) - num_color_sets
         # otherwise, save all solvable configs and set solvable flag to 1
         else:
             num_color_sets = len(solvable_color_sets)
             d['Solvable_Flag'] = [1]
             d['Color_Sets'] = [solvable]
             d['Num_Color_Sets'] = num_color_sets
+            if verbose:
+                print_num = num_color_sets
 
         if verbose:
-            print("This puzzle has " + str(num_color_sets) + " solvable color sets.")
+            print("This puzzle has " + str(print_num) + " solvable color sets.")
         
         data = pd.DataFrame(data = d)
         return data

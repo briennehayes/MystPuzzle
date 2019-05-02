@@ -3,7 +3,7 @@ import pandas as pd
 
 # The three-vertex graph
 
-graph3 = mc.graph_solver([(0, 1), (1, 2), (2, 0)], 3, 2)
+graph3 = mc.graph_solver([(0, 1), (1, 2), (2, 0)], 3, 2, verbose = True)
 
 graph3.draw_current_config()
 graph3.draw_expanded_graph()
